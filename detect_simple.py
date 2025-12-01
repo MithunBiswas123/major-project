@@ -10,7 +10,7 @@ import tensorflow as tf
 from collections import deque
 
 def extract_landmarks(results):
-    """Extract 126 features - EXACT MATCH with training"""
+    """Extract NORMALIZED landmarks - position independent"""
     left_hand = [0.0] * 63
     right_hand = [0.0] * 63
     
@@ -21,9 +21,27 @@ def extract_landmarks(results):
             
             hand_label = results.multi_handedness[idx].classification[0].label
             
-            landmarks = []
+            # Get all landmarks
+            xs, ys, zs = [], [], []
             for lm in hand_landmarks.landmark:
-                landmarks.extend([lm.x, lm.y, lm.z])
+                xs.append(lm.x)
+                ys.append(lm.y)
+                zs.append(lm.z)
+            
+            # Normalize to wrist (landmark 0)
+            wrist_x, wrist_y, wrist_z = xs[0], ys[0], zs[0]
+            
+            # Hand size for scale normalization
+            hand_size = np.sqrt((xs[12] - wrist_x)**2 + (ys[12] - wrist_y)**2)
+            if hand_size < 0.01:
+                hand_size = 0.1
+            
+            # Normalize all landmarks
+            landmarks = []
+            for i in range(21):
+                landmarks.append((xs[i] - wrist_x) / hand_size)
+                landmarks.append((ys[i] - wrist_y) / hand_size)
+                landmarks.append((zs[i] - wrist_z) / hand_size)
             
             if hand_label == 'Left':
                 left_hand = landmarks

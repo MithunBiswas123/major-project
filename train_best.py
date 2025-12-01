@@ -1,6 +1,5 @@
 """
-Train 15 Signs - SPACE KEY TO RECORD
-Restore the previous high accuracy model
+Ultimate Training - Position Normalized for Better Recognition
 """
 
 import cv2
@@ -13,13 +12,13 @@ from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from tensorflow import keras
 
-# Original 15 signs that worked well
+# 15 signs
 SIGNS = ['1', '2', '3', '4', '5', 'A', 'B', 'C', 'D', 'E', 'goodbye', 'hi', 'no', 'peace', 'yes']
 
-SAMPLES_PER_SIGN = 200  # More samples for higher accuracy
+SAMPLES_PER_SIGN = 250  # More samples
 
-def extract_landmarks(results):
-    """Extract 126 features from both hands - MATCHES DETECTION CODE"""
+def extract_normalized_landmarks(results):
+    """Extract NORMALIZED landmarks - position independent"""
     left_hand = [0.0] * 63
     right_hand = [0.0] * 63
     
@@ -28,12 +27,30 @@ def extract_landmarks(results):
             if idx >= len(results.multi_handedness):
                 continue
             
-            # Get hand label (Left or Right)
             hand_label = results.multi_handedness[idx].classification[0].label
             
+            # Get all landmarks
             landmarks = []
+            xs, ys, zs = [], [], []
             for lm in hand_landmarks.landmark:
-                landmarks.extend([lm.x, lm.y, lm.z])
+                xs.append(lm.x)
+                ys.append(lm.y)
+                zs.append(lm.z)
+            
+            # Normalize to wrist (landmark 0) - makes position independent
+            wrist_x, wrist_y, wrist_z = xs[0], ys[0], zs[0]
+            
+            # Calculate hand size for scale normalization
+            # Distance from wrist to middle finger tip (landmark 12)
+            hand_size = np.sqrt((xs[12] - wrist_x)**2 + (ys[12] - wrist_y)**2)
+            if hand_size < 0.01:
+                hand_size = 0.1  # Prevent division by zero
+            
+            # Normalize all landmarks relative to wrist and scale by hand size
+            for i in range(21):
+                landmarks.append((xs[i] - wrist_x) / hand_size)
+                landmarks.append((ys[i] - wrist_y) / hand_size)
+                landmarks.append((zs[i] - wrist_z) / hand_size)
             
             if hand_label == 'Left':
                 left_hand = landmarks
@@ -43,15 +60,15 @@ def extract_landmarks(results):
     return left_hand + right_hand
 
 def collect_data():
-    """Collect training data - PRESS SPACE TO RECORD"""
+    """Collect training data with continuous recording while holding SPACE"""
     mp_hands = mp.solutions.hands
+    mp_draw = mp.solutions.drawing_utils
     hands = mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=2,
         min_detection_confidence=0.7,
         min_tracking_confidence=0.5
     )
-    mp_draw = mp.solutions.drawing_utils
     
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -61,21 +78,24 @@ def collect_data():
     all_labels = []
     
     print("\n" + "="*60)
-    print("15 SIGN TRAINING - SPACE KEY MODE")
+    print("FAST TRAINING - HOLD SPACE TO RECORD")
     print("="*60)
     print(f"Signs: {SIGNS}")
     print(f"Samples per sign: {SAMPLES_PER_SIGN}")
     print("\nControls:")
-    print("  SPACE = Record one sample")
-    print("  N = Skip to next sign")
+    print("  HOLD SPACE = Record continuously (move hand around!)")
+    print("  RELEASE SPACE = Stop recording")
+    print("  N = Next sign")
     print("  Q = Quit and train")
     print("="*60)
     
     for sign_idx, sign in enumerate(SIGNS):
         print(f"\n[{sign_idx+1}/{len(SIGNS)}] Sign: {sign}")
+        print("  HOLD SPACE and move hand to different positions!")
         
         samples_collected = 0
         sign_data = []
+        recording = False
         
         while samples_collected < SAMPLES_PER_SIGN:
             ret, frame = cap.read()
@@ -86,62 +106,59 @@ def collect_data():
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(rgb)
             
-            # Draw hand landmarks
+            # Draw landmarks
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
                     mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
             
             # Progress bar
             progress = samples_collected / SAMPLES_PER_SIGN
-            bar_width = 300
-            cv2.rectangle(frame, (170, 25), (170 + bar_width, 45), (50, 50, 50), -1)
-            cv2.rectangle(frame, (170, 25), (170 + int(bar_width * progress), 45), (0, 255, 0), -1)
+            bar_width = 400
+            cv2.rectangle(frame, (120, 30), (120 + bar_width, 50), (50, 50, 50), -1)
+            cv2.rectangle(frame, (120, 30), (120 + int(bar_width * progress), 50), (0, 255, 0), -1)
             
             # Text
-            cv2.putText(frame, f"Sign: {sign}", (10, 40), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-            cv2.putText(frame, f"[{sign_idx+1}/{len(SIGNS)}]", (500, 40),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
-            cv2.putText(frame, f"Samples: {samples_collected}/{SAMPLES_PER_SIGN}", (10, 75),
+            cv2.putText(frame, f"{sign}", (10, 45), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 0), 3)
+            cv2.putText(frame, f"{samples_collected}/{SAMPLES_PER_SIGN}", (540, 45),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
-            # Instructions
-            cv2.putText(frame, "PRESS SPACE TO RECORD", (150, 450),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-            cv2.putText(frame, "N=Next  Q=Quit", (230, 470),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+            # Recording status
+            if recording:
+                cv2.putText(frame, "RECORDING...", (220, 470),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                cv2.circle(frame, (200, 462), 10, (0, 0, 255), -1)
+            else:
+                cv2.putText(frame, "HOLD SPACE TO RECORD", (150, 470),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
             # Hand status
             if results.multi_hand_landmarks:
-                cv2.putText(frame, f"Hands: {len(results.multi_hand_landmarks)}", (530, 75),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.circle(frame, (600, 30), 12, (0, 255, 0), -1)
             else:
-                cv2.putText(frame, "No hands!", (520, 75),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.circle(frame, (600, 30), 12, (0, 0, 255), -1)
             
-            cv2.imshow('Training - SPACE to Record', frame)
+            cv2.imshow('Training', frame)
             
             key = cv2.waitKey(1) & 0xFF
             
-            if key == ord(' '):  # SPACE
-                if results.multi_hand_landmarks:
-                    features = extract_landmarks(results)
-                    sign_data.append(features)
-                    samples_collected += 1
-                    
-                    # Green flash
-                    flash = frame.copy()
-                    cv2.rectangle(flash, (0, 0), (640, 480), (0, 255, 0), 10)
-                    cv2.imshow('Training - SPACE to Record', flash)
-                    cv2.waitKey(30)
-                else:
-                    print("  No hand detected!")
+            # Check if SPACE is held
+            if key == ord(' '):
+                recording = True
+            else:
+                recording = False
             
-            elif key == ord('n'):
+            # Record while SPACE held
+            if recording and results.multi_hand_landmarks:
+                features = extract_normalized_landmarks(results)
+                sign_data.append(features)
+                samples_collected += 1
+            
+            if key == ord('n'):
                 print(f"  Skipping {sign}")
                 break
             
-            elif key == ord('q'):
+            if key == ord('q'):
                 print("\nQuitting...")
                 if sign_data:
                     all_data.extend(sign_data)
@@ -162,31 +179,32 @@ def collect_data():
     
     return np.array(all_data), all_labels
 
-def augment_data(X, y, factor=10):
-    """Augment with noise - more variations"""
+def augment_data(X, y, factor=12):
+    """Heavy augmentation"""
     X_aug = [X]
     y_aug = [y]
     
     for i in range(factor - 1):
-        noise = np.random.normal(0, 0.005 * (i + 1), X.shape)
+        noise = np.random.normal(0, 0.02 * (i % 4 + 1), X.shape)
         X_aug.append(X + noise)
         y_aug.append(y)
     
     return np.vstack(X_aug), np.concatenate(y_aug)
 
 def build_model(num_classes):
-    """Build neural network"""
+    """Bigger model for better accuracy"""
     model = keras.Sequential([
         keras.layers.Input(shape=(126,)),
+        keras.layers.Dense(512, activation='relu'),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.4),
         keras.layers.Dense(256, activation='relu'),
         keras.layers.BatchNormalization(),
         keras.layers.Dropout(0.3),
         keras.layers.Dense(128, activation='relu'),
         keras.layers.BatchNormalization(),
-        keras.layers.Dropout(0.3),
-        keras.layers.Dense(64, activation='relu'),
-        keras.layers.BatchNormalization(),
         keras.layers.Dropout(0.2),
+        keras.layers.Dense(64, activation='relu'),
         keras.layers.Dense(num_classes, activation='softmax')
     ])
     
@@ -200,11 +218,11 @@ def build_model(num_classes):
 
 def main():
     print("\n" + "="*60)
-    print("15 SIGN TRAINER - RESTORE HIGH ACCURACY")
+    print("POSITION-NORMALIZED TRAINING")
     print("="*60)
-    print(f"Signs: {SIGNS}")
-    print(f"Samples per sign: {SAMPLES_PER_SIGN}")
-    print("Target accuracy: 99%+")
+    print("This training uses NORMALIZED landmarks")
+    print("so gestures work regardless of hand position!")
+    print(f"\nSigns: {SIGNS}")
     
     input("\nPress ENTER to start...")
     
@@ -224,14 +242,14 @@ def main():
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # Augment 8x
-    print("Augmenting data 8x...")
-    X_aug, y_aug = augment_data(X_scaled, y_encoded, factor=8)
+    # Heavy augmentation
+    print("Augmenting data 12x...")
+    X_aug, y_aug = augment_data(X_scaled, y_encoded, factor=12)
     print(f"After augmentation: {len(X_aug)} samples")
     
     # Split
     X_train, X_test, y_train, y_test = train_test_split(
-        X_aug, y_aug, test_size=0.2, random_state=42, stratify=y_aug
+        X_aug, y_aug, test_size=0.15, random_state=42, stratify=y_aug
     )
     
     # Train
@@ -239,15 +257,15 @@ def main():
     model = build_model(len(le.classes_))
     
     callbacks = [
-        keras.callbacks.EarlyStopping(patience=15, restore_best_weights=True),
-        keras.callbacks.ReduceLROnPlateau(patience=5, factor=0.5)
+        keras.callbacks.EarlyStopping(patience=20, restore_best_weights=True),
+        keras.callbacks.ReduceLROnPlateau(patience=7, factor=0.5, min_lr=1e-6)
     ]
     
     history = model.fit(
         X_train, y_train,
-        epochs=100,
-        batch_size=32,
-        validation_split=0.2,
+        epochs=150,
+        batch_size=64,
+        validation_split=0.15,
         callbacks=callbacks,
         verbose=1
     )
@@ -266,9 +284,8 @@ def main():
     joblib.dump(scaler, 'models/scalers/scaler.pkl')
     joblib.dump(le, 'models/scalers/label_encoder.pkl')
     
-    print("\nSaved model and scalers!")
+    print("\nSaved!")
     print(f"Signs: {list(le.classes_)}")
-    print("\nRun detection with: python -c \"from src.detect import detect_signs; detect_signs('models/saved/lstm_model.h5')\"")
 
 if __name__ == "__main__":
     main()
