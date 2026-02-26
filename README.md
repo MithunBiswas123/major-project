@@ -12,7 +12,7 @@ A comprehensive real-time sign language detection system using deep learning and
 - **Multiple Neural Network Architectures**
   - CNN (Convolutional Neural Network)
   - LSTM (Long Short-Term Memory)
-  - Hybrid (CNN + LSTM + GRU)
+  - Hybrid (CNN + LSTM + GRU( Gated Recurrent Unit))
   - Transformer-based model
 
 - **Real-time Detection**
