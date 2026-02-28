@@ -20,7 +20,8 @@ from tensorflow.keras.callbacks import (
 
 from .config import (
     TOTAL_FEATURES, NUM_SIGNS, LEARNING_RATE,
-    CNN_MODEL_PATH, LSTM_MODEL_PATH, HYBRID_MODEL_PATH, TRANSFORMER_MODEL_PATH
+    CNN_MODEL_PATH, LSTM_MODEL_PATH, HYBRID_MODEL_PATH, TRANSFORMER_MODEL_PATH,
+    EARLY_STOPPING_PATIENCE, REDUCE_LR_PATIENCE, REDUCE_LR_FACTOR
 )
 
 
@@ -287,7 +288,7 @@ def create_simple_dnn(num_features=TOTAL_FEATURES, num_classes=NUM_SIGNS,
     return model
 
 
-def get_callbacks(model_path, patience=15):
+def get_callbacks(model_path, patience=EARLY_STOPPING_PATIENCE):
     """Get training callbacks"""
     
     callbacks = [
@@ -299,8 +300,8 @@ def get_callbacks(model_path, patience=15):
         ),
         ReduceLROnPlateau(
             monitor='val_loss',
-            factor=0.5,
-            patience=patience // 2,
+            factor=REDUCE_LR_FACTOR,
+            patience=REDUCE_LR_PATIENCE,
             min_lr=1e-6,
             verbose=1
         ),

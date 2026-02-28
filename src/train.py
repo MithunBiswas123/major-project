@@ -76,6 +76,25 @@ class SignLanguageTrainer:
         
         return self.model
     
+    def compute_class_weights(self):
+        """Compute class weights to handle any residual imbalance"""
+        from collections import Counter
+        
+        class_counts = Counter(self.y_train)
+        total = len(self.y_train)
+        n_classes = len(class_counts)
+        
+        # Balanced class weights: total / (n_classes * count_per_class)
+        class_weights = {}
+        for cls, count in class_counts.items():
+            class_weights[cls] = total / (n_classes * count)
+        
+        print(f"⚖️  Class weights computed for {n_classes} classes")
+        weight_vals = list(class_weights.values())
+        print(f"   Range: [{min(weight_vals):.3f}, {max(weight_vals):.3f}]")
+        
+        return class_weights
+    
     def train(self, epochs=EPOCHS, batch_size=BATCH_SIZE):
         """Train the model"""
         print("\n" + "=" * 60)
@@ -89,12 +108,16 @@ class SignLanguageTrainer:
         model_path = get_model_path(self.model_type)
         callbacks = get_callbacks(model_path)
         
+        # Compute class weights to handle any residual imbalance
+        class_weights = self.compute_class_weights()
+        
         self.history = self.model.fit(
             self.X_train, self.y_train,
             validation_data=(self.X_val, self.y_val),
             epochs=epochs,
             batch_size=batch_size,
             callbacks=callbacks,
+            class_weight=class_weights,
             verbose=1
         )
         

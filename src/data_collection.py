@@ -291,9 +291,131 @@ def quick_collect(signs, samples=30):
     return collector.data
 
 
-if __name__ == "__main__":
-    # Test collection
-    collector = DataCollector(samples_per_sign=10)
-    collector.collect_sign('A', 'Test collection for letter A')
+# ============================================================================
+# CONVERSATION SIGN COLLECTION
+# ============================================================================
+
+# All 14 conversation signs you want to collect
+CONVERSATION_SIGNS = [
+    'hi', 'what', 'is', 'your', 'name',
+    'my', 'to', 'who', 'where', 'why',
+    'when', 'which', 'me', 'how'
+]
+
+# How-to tips for each sign (shown during collection)
+GESTURE_TIPS = {
+    'hi':    'Wave your open hand left-right near your shoulder',
+    'what':  'Open both palms up, wiggle fingers downward (shrug)',
+    'is':    'Hold pinky up (I-hand), move it slightly forward from chin',
+    'your':  'Push flat open palm forward toward the camera/person',
+    'name':  'Both hands in H-shape, tap middle fingers on index fingers twice',
+    'my':    'Place your flat dominant hand on your chest',
+    'to':    'Point both index fingers at each other, tap tips together',
+    'who':   'Circle your index finger around your chin/mouth area',
+    'where': 'Hold up index finger and waggle it side to side',
+    'why':   'Touch forehead with fingers, move hand outward and down',
+    'when':  'Circle dominant index finger around non-dominant index tip',
+    'which': 'Both thumbs up, alternate hands up and down',
+    'me':    'Point your index finger toward your own chest',
+    'how':   'Both fists knuckles together, then roll/open forward',
+}
+
+
+def get_already_collected_signs():
+    """Check which signs already have data in the CSV (so we don't erase them)"""
+    if not os.path.exists(DATASET_CSV):
+        return set()
+    df = pd.read_csv(DATASET_CSV)
+    return set(df['sign'].unique())
+
+
+def collect_conversation_signs(samples=100):
+    """
+    Collect the 14 conversation signs.
+    - Existing CSV data is NEVER deleted (append-only).
+    - Signs that already have enough data are shown but can be skipped.
+    """
+    already = get_already_collected_signs()
+
+    print("\n" + "=" * 60)
+    print("  CONVERSATION SIGN LANGUAGE COLLECTION")
+    print("=" * 60)
+    print(f"  Signs to collect : {', '.join(CONVERSATION_SIGNS)}")
+    print(f"  Samples per sign : {samples}")
+    print(f"  Total new samples: {len(CONVERSATION_SIGNS) * samples}")
+    print("=" * 60)
+
+    if already:
+        print(f"\n  Signs already in dataset: {', '.join(sorted(already))}")
+        print("  (Old data will NOT be erased. New samples are appended.)")
+
+    collector = DataCollector(samples_per_sign=samples)
+
+    for i, sign in enumerate(CONVERSATION_SIGNS):
+        desc = SIGNS.get(sign, '')
+        tip  = GESTURE_TIPS.get(sign, '')
+        has_data = sign in already
+
+        print(f"\n[{i+1}/{len(CONVERSATION_SIGNS)}] Sign: {sign.upper()}")
+        print(f"   Description : {desc}")
+        print(f"   How to do it: {tip}")
+        if has_data:
+            print(f"   ** Already has data in CSV (will ADD more, not replace) **")
+        print("-" * 60)
+
+        choice = input(f"   Press ENTER to collect '{sign}', or 's' to skip: ").strip().lower()
+        if choice == 's':
+            print(f"   Skipped {sign}")
+            continue
+
+        success = collector.collect_sign(sign, desc)
+
+        if not success:
+            retry = input("   Incomplete. Retry? (y/n): ").strip().lower()
+            if retry == 'y':
+                collector.collect_sign(sign, desc)
+
+    # save_to_csv APPENDS to existing CSV — old data stays safe
     collector.save_to_csv()
     collector.release()
+
+    print("\n" + "=" * 60)
+    print("  ALL DONE! New data appended to existing dataset.")
+    print("  Old sign data is intact.")
+    print("=" * 60)
+    print("\n  Next step: retrain the model with:")
+    print("    python -m src.train")
+
+    return collector.data
+
+
+if __name__ == "__main__":
+    print("\nChoose what to collect:")
+    print("  1) Conversation signs (hi, what, is, your, name, ...)")
+    print("  2) Collect by category")
+    print("  3) Collect ALL signs")
+    print("  4) Quick test (single sign)")
+
+    choice = input("\nEnter choice (1/2/3/4): ").strip()
+
+    if choice == '1':
+        n = input("Samples per sign (default 100): ").strip()
+        n = int(n) if n.isdigit() else 100
+        collect_conversation_signs(samples=n)
+    elif choice == '2':
+        print(f"Categories: {list(SIGN_CATEGORIES.keys())}")
+        cat = input("Enter category name: ").strip()
+        collector = DataCollector(samples_per_sign=100)
+        collector.collect_by_category(cat)
+        collector.release()
+    elif choice == '3':
+        collector = DataCollector(samples_per_sign=100)
+        collector.collect_multiple_signs()
+        collector.release()
+    else:
+        sign = input("Enter sign label: ").strip()
+        desc = SIGNS.get(sign, 'Custom sign')
+        collector = DataCollector(samples_per_sign=30)
+        collector.collect_sign(sign, desc)
+        collector.save_to_csv()
+        collector.release()

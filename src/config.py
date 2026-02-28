@@ -163,6 +163,13 @@ SIGNS = {
     'family': 'F hands circling together',
     'mother': 'Open hand, thumb on chin',
     'father': 'Open hand, thumb on forehead',
+
+    # ==================== CONVERSATION WORDS (5) ====================
+    'is': 'I-hand (pinky up) moves forward slightly from chest',
+    'your': 'Push flat open hand forward toward the other person',
+    'name': 'Tap H-hand fingers together twice (both hands)',
+    'my': 'Flat hand placed on chest (possessive)',
+    'to': 'Index finger of one hand touches tip of other index finger',
 }
 
 # Sign categories for organized display
@@ -183,7 +190,9 @@ SIGN_CATEGORIES = {
     'Time': ['today', 'tomorrow', 'yesterday', 'now', 'later', 'morning',
              'afternoon', 'evening', 'night', 'week'],
     'People': ['me', 'you', 'he', 'she', 'we', 'they', 'friend', 'family',
-               ]
+               'mother', 'father'],
+    'Conversation': ['hi', 'what', 'is', 'your', 'name', 'my', 'to',
+                     'who', 'where', 'why', 'when', 'which', 'me', 'how'],
 }
 
 # Get list of all sign labels
@@ -216,12 +225,12 @@ TOTAL_FEATURES = FEATURES_PER_HAND * 2  # 126 features (both hands)
 # ============================================================================
 # Training parameters
 BATCH_SIZE = 32
-EPOCHS = 100
-LEARNING_RATE = 0.001
-VALIDATION_SPLIT = 0.2
-TEST_SPLIT = 0.2
-EARLY_STOPPING_PATIENCE = 15
-REDUCE_LR_PATIENCE = 5
+EPOCHS = 150
+LEARNING_RATE = 0.0005
+VALIDATION_SPLIT = 0.15
+TEST_SPLIT = 0.15
+EARLY_STOPPING_PATIENCE = 20
+REDUCE_LR_PATIENCE = 7
 REDUCE_LR_FACTOR = 0.5
 
 # Model types available
